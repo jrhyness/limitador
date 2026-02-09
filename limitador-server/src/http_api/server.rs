@@ -140,8 +140,8 @@ async fn check(
     let mut ctx = Context::default();
     ctx.list_binding("descriptors".to_string(), vec![values]);
     let is_rate_limited_result = match state.get_ref().limiter() {
-        Limiter::Blocking(limiter) => limiter.is_rate_limited(&namespace, &ctx, delta),
-        Limiter::Async(limiter) => limiter.is_rate_limited(&namespace, &ctx, delta).await,
+        Limiter::Blocking(limiter) => limiter.is_rate_limited(&namespace, &ctx, delta, false),
+        Limiter::Async(limiter) => limiter.is_rate_limited(&namespace, &ctx, delta, false).await,
     };
 
     match is_rate_limited_result {
@@ -172,8 +172,8 @@ async fn report(
     let mut ctx = Context::default();
     ctx.list_binding("descriptors".to_string(), vec![values]);
     let update_counters_result = match data.get_ref().limiter() {
-        Limiter::Blocking(limiter) => limiter.update_counters(&namespace, &ctx, delta),
-        Limiter::Async(limiter) => limiter.update_counters(&namespace, &ctx, delta).await,
+        Limiter::Blocking(limiter) => limiter.update_counters(&namespace, &ctx, delta, false),
+        Limiter::Async(limiter) => limiter.update_counters(&namespace, &ctx, delta, false).await,
     };
 
     match update_counters_result {

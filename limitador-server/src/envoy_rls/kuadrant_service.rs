@@ -8,16 +8,26 @@ use super::server::envoy::service::ratelimit::v3::rate_limit_response::Code;
 use super::server::envoy::service::ratelimit::v3::{RateLimitRequest, RateLimitResponse};
 use crate::prometheus_metrics::PrometheusMetrics;
 use crate::Limiter;
+use crate::RateLimitHeaders;
 use limitador::limit::Context;
 
 pub struct KuadrantService {
     limiter: Arc<Limiter>,
+    rate_limit_headers: RateLimitHeaders,
     metrics: Arc<PrometheusMetrics>,
 }
 
 impl KuadrantService {
-    pub fn new(limiter: Arc<Limiter>, metrics: Arc<PrometheusMetrics>) -> Self {
-        Self { limiter, metrics }
+    pub fn new(
+        limiter: Arc<Limiter>,
+        rate_limit_headers: RateLimitHeaders,
+        metrics: Arc<PrometheusMetrics>,
+    ) -> Self {
+        Self {
+            limiter,
+            rate_limit_headers,
+            metrics,
+        }
     }
 }
 
@@ -60,8 +70,20 @@ impl RateLimitService for KuadrantService {
         ctx.list_binding("descriptors".to_string(), values);
 
         let rate_limited_resp = match &*self.limiter {
-            Limiter::Blocking(limiter) => limiter.is_rate_limited(&namespace, &ctx, 1),
-            Limiter::Async(limiter) => limiter.is_rate_limited(&namespace, &ctx, 1).await,
+            Limiter::Blocking(limiter) => limiter
+                .is_rate_limited(
+                    &namespace,
+                    &ctx,
+                    req.hits_addend as u64,
+                    self.rate_limit_headers != RateLimitHeaders::None,
+                ),
+            Limiter::Async(limiter) => limiter
+                .is_rate_limited(
+                    &namespace,
+                    &ctx,
+                    req.hits_addend as u64,
+                    self.rate_limit_headers != RateLimitHeaders::None,
+                ).await,
         };
 
         if let Err(e) = rate_limited_resp {
@@ -78,7 +100,7 @@ impl RateLimitService for KuadrantService {
             return Err(Status::unavailable("Service unavailable"));
         }
 
-        let rate_limited_resp = rate_limited_resp.unwrap();
+        let mut rate_limited_resp = rate_limited_resp.unwrap();
         let resp_code = if rate_limited_resp.limited {
             self.metrics.incr_limited_calls(
                 &namespace,
@@ -95,7 +117,7 @@ impl RateLimitService for KuadrantService {
             overall_code: resp_code.into(),
             statuses: vec![],
             request_headers_to_add: vec![],
-            response_headers_to_add: vec![],
+            response_headers_to_add: self.rate_limit_headers.headers(&mut rate_limited_resp),
             raw_body: vec![],
             dynamic_metadata: None,
             quota: None,
@@ -149,8 +171,20 @@ impl RateLimitService for KuadrantService {
         ctx.list_binding("descriptors".to_string(), values);
 
         let rate_limited_resp = match &*self.limiter {
-            Limiter::Blocking(limiter) => limiter.update_counters(&namespace, &ctx, hits_addend),
-            Limiter::Async(limiter) => limiter.update_counters(&namespace, &ctx, hits_addend).await,
+            Limiter::Blocking(limiter) => limiter
+                .update_counters(
+                    &namespace, 
+                    &ctx, 
+                    hits_addend,
+                    self.rate_limit_headers != RateLimitHeaders::None
+                ),
+            Limiter::Async(limiter) => limiter
+                .update_counters(
+                    &namespace, 
+                    &ctx, 
+                    hits_addend,
+                    self.rate_limit_headers != RateLimitHeaders::None 
+                ).await,
         };
 
         if let Err(e) = rate_limited_resp {
@@ -167,6 +201,8 @@ impl RateLimitService for KuadrantService {
             return Err(Status::unavailable("Service unavailable"));
         }
 
+        let mut rate_limited_resp = rate_limited_resp.unwrap();
+
         self.metrics
             .incr_authorized_hits(&namespace, &ctx, hits_addend);
 
@@ -174,7 +210,7 @@ impl RateLimitService for KuadrantService {
             overall_code: Code::Ok as i32,
             statuses: vec![],
             request_headers_to_add: vec![],
-            response_headers_to_add: vec![],
+            response_headers_to_add: self.rate_limit_headers.headers(&mut rate_limited_resp),
             raw_body: vec![],
             dynamic_metadata: None,
             quota: None,
@@ -226,6 +262,7 @@ mod tests {
 
             let rate_limiter = KuadrantService::new(
                 Arc::new(Limiter::Blocking(limiter)),
+                RateLimitHeaders::None, // TODO: test with headers
                 Arc::new(PrometheusMetrics::new_with_handle(
                     false,
                     TEST_PROMETHEUS_HANDLE.clone(),
@@ -247,7 +284,7 @@ mod tests {
                     ],
                     limit: None,
                 }],
-                hits_addend: 1, // irrelevant for this test
+                hits_addend: 1, 
             };
 
             // There's a limit of 1, so the first request should return "OK"
@@ -287,6 +324,7 @@ mod tests {
 
             let rate_limiter = KuadrantService::new(
                 Arc::new(Limiter::Blocking(limiter)),
+                RateLimitHeaders::None, // TODO: test with headers
                 Arc::new(PrometheusMetrics::new_with_handle(
                     false,
                     TEST_PROMETHEUS_HANDLE.clone(),
@@ -311,8 +349,7 @@ mod tests {
                 hits_addend: 1, // irrelevant for this test
             };
 
-            // There's a limit of 1, so the first request should return "OK" and the
-            // second "OverLimit".
+            // There's a limit of 0, so the first request should return "OverLimit".
 
             let response = rate_limiter
                 .check_rate_limit(req.into_request())
@@ -328,6 +365,7 @@ mod tests {
             let limiter = RateLimiter::new(10_000);
             let rate_limiter = KuadrantService::new(
                 Arc::new(Limiter::Blocking(limiter)),
+                RateLimitHeaders::None, // TODO: test with headers
                 Arc::new(PrometheusMetrics::new_with_handle(
                     false,
                     TEST_PROMETHEUS_HANDLE.clone(),
@@ -361,6 +399,7 @@ mod tests {
             let limiter = RateLimiter::new(10_000);
             let rate_limiter = KuadrantService::new(
                 Arc::new(Limiter::Blocking(limiter)),
+                RateLimitHeaders::None, // TODO: test with headers
                 Arc::new(PrometheusMetrics::new_with_handle(
                     false,
                     TEST_PROMETHEUS_HANDLE.clone(),
@@ -426,6 +465,7 @@ mod tests {
 
             let rate_limiter = KuadrantService::new(
                 Arc::new(Limiter::Blocking(limiter)),
+                RateLimitHeaders::None, // TODO: test with headers
                 Arc::new(PrometheusMetrics::new_with_handle(
                     false,
                     TEST_PROMETHEUS_HANDLE.clone(),
@@ -504,6 +544,7 @@ mod tests {
 
             let rate_limiter = KuadrantService::new(
                 Arc::new(Limiter::Blocking(limiter)),
+                RateLimitHeaders::None, // TODO: test with headers
                 Arc::new(PrometheusMetrics::new_with_handle(
                     false,
                     TEST_PROMETHEUS_HANDLE.clone(),
@@ -556,6 +597,7 @@ mod tests {
 
             let rate_limiter = KuadrantService::new(
                 Arc::new(Limiter::Blocking(limiter)),
+                RateLimitHeaders::None, // TODO: test with headers
                 Arc::new(PrometheusMetrics::new_with_handle(
                     false,
                     TEST_PROMETHEUS_HANDLE.clone(),
@@ -594,6 +636,7 @@ mod tests {
             let limiter = RateLimiter::new(10_000);
             let rate_limiter = KuadrantService::new(
                 Arc::new(Limiter::Blocking(limiter)),
+                RateLimitHeaders::None, // TODO: test with headers
                 Arc::new(PrometheusMetrics::new_with_handle(
                     false,
                     TEST_PROMETHEUS_HANDLE.clone(),
@@ -623,6 +666,7 @@ mod tests {
             let limiter = RateLimiter::new(10_000);
             let rate_limiter = KuadrantService::new(
                 Arc::new(Limiter::Blocking(limiter)),
+                RateLimitHeaders::None, // TODO: test with headers
                 Arc::new(PrometheusMetrics::new_with_handle(
                     false,
                     TEST_PROMETHEUS_HANDLE.clone(),

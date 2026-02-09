@@ -45,6 +45,8 @@ impl CounterStorage for RocksDbStorage {
         &self,
         counters: &mut Vec<Counter>,
         delta: u64,
+        check: bool,
+        update: bool,
         load_counters: bool,
     ) -> Result<Authorization, StorageErr> {
         let mut keys: Vec<Vec<u8>> = Vec::with_capacity(counters.len());
@@ -76,17 +78,21 @@ impl CounterStorage for RocksDbStorage {
                 );
             }
 
-            if counter.max_value() < val + delta {
-                return Ok(Authorization::Limited(
-                    counter.limit().name().map(|n| n.to_string()),
-                ));
+            if check {
+                if counter.max_value() < val + delta {
+                    return Ok(Authorization::Limited(
+                        counter.limit().name().map(|n| n.to_string()),
+                    ));
+                }
             }
 
             keys.push(key);
         }
 
-        for (idx, counter) in counters.iter_mut().enumerate() {
-            self.insert_or_update(&keys[idx], counter, delta)?;
+        if update {
+            for (idx, counter) in counters.iter_mut().enumerate() {
+                self.insert_or_update(&keys[idx], counter, delta)?;
+            }
         }
 
         Ok(Authorization::Ok)
