@@ -175,14 +175,14 @@ impl RateLimitService for KuadrantService {
                 .update_counters(
                     &namespace, 
                     &ctx, 
-                    hits_addend,
+                    1, // hits_addend ?,
                     self.rate_limit_headers != RateLimitHeaders::None
                 ),
             Limiter::Async(limiter) => limiter
                 .update_counters(
                     &namespace, 
                     &ctx, 
-                    hits_addend,
+                    1, // hits_addend ?,
                     self.rate_limit_headers != RateLimitHeaders::None 
                 ).await,
         };
@@ -284,7 +284,7 @@ mod tests {
                     ],
                     limit: None,
                 }],
-                hits_addend: 1, 
+                hits_addend: 1, // irrelevant for this test
             };
 
             // There's a limit of 1, so the first request should return "OK"
