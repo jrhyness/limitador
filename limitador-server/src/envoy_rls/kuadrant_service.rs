@@ -74,14 +74,14 @@ impl RateLimitService for KuadrantService {
                 .is_rate_limited(
                     &namespace,
                     &ctx,
-                    req.hits_addend as u64,
+                    1, // req.hits_addend as u64,
                     self.rate_limit_headers != RateLimitHeaders::None,
                 ),
             Limiter::Async(limiter) => limiter
                 .is_rate_limited(
                     &namespace,
                     &ctx,
-                    req.hits_addend as u64,
+                    1, // req.hits_addend as u64,
                     self.rate_limit_headers != RateLimitHeaders::None,
                 ).await,
         };
@@ -175,14 +175,14 @@ impl RateLimitService for KuadrantService {
                 .update_counters(
                     &namespace, 
                     &ctx, 
-                    1, // hits_addend ?,
+                    hits_addend,
                     self.rate_limit_headers != RateLimitHeaders::None
                 ),
             Limiter::Async(limiter) => limiter
                 .update_counters(
                     &namespace, 
                     &ctx, 
-                    1, // hits_addend ?,
+                    hits_addend,
                     self.rate_limit_headers != RateLimitHeaders::None 
                 ).await,
         };
