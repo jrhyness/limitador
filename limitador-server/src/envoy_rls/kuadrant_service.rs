@@ -509,6 +509,140 @@ mod tests {
 
             assert_eq!(response.overall_code, i32::from(Code::OverLimit));
         }
+
+        #[tokio::test]
+        async fn test_check_rate_limit_with_draftversion03_headers() {
+            let namespace = "test_namespace";
+            let limit = Limit::new(
+                namespace,
+                2,
+                60,
+                vec!["descriptors[0]['req.method'] == 'GET'"
+                    .try_into()
+                    .expect("failed parsing!")],
+                vec!["descriptors[0]['app.id']"
+                    .try_into()
+                    .expect("failed parsing!")],
+            );
+
+            let limiter = RateLimiter::new(10_000);
+            limiter.add_limit(limit);
+
+            let rate_limiter = KuadrantService::new(
+                Arc::new(Limiter::Blocking(limiter)),
+                RateLimitHeaders::DraftVersion03,
+                Arc::new(PrometheusMetrics::new_with_handle(
+                    false,
+                    TEST_PROMETHEUS_HANDLE.clone(),
+                )),
+            );
+
+            let req = RateLimitRequest {
+                domain: namespace.to_string(),
+                descriptors: vec![RateLimitDescriptor {
+                    entries: vec![
+                        Entry {
+                            key: "req.method".to_string(),
+                            value: "GET".to_string(),
+                        },
+                        Entry {
+                            key: "app.id".to_string(),
+                            value: "1".to_string(),
+                        },
+                    ],
+                    limit: None,
+                }],
+                hits_addend: 1,
+            };
+
+            let response = rate_limiter
+                .check_rate_limit(req.into_request())
+                .await
+                .unwrap()
+                .into_inner();
+
+            assert_eq!(response.overall_code, i32::from(Code::Ok));
+            assert_eq!(
+                response.response_headers_to_add,
+                vec![
+                    crate::envoy_rls::server::envoy::config::core::v3::HeaderValue {
+                        key: "X-RateLimit-Limit".to_string(),
+                        value: "2, 2;w=60".to_string(),
+                    },
+                    crate::envoy_rls::server::envoy::config::core::v3::HeaderValue {
+                        key: "X-RateLimit-Remaining".to_string(),
+                        value: "2".to_string(),
+                    },
+                ]
+            );
+        }
+
+        #[tokio::test]
+        async fn test_check_rate_limit_overlimit_with_draftversion03_headers() {
+            let namespace = "test_namespace";
+            let limit = Limit::new(
+                namespace,
+                0,
+                60,
+                vec!["descriptors[0]['req.method'] == 'GET'"
+                    .try_into()
+                    .expect("failed parsing!")],
+                vec!["descriptors[0]['app.id']"
+                    .try_into()
+                    .expect("failed parsing!")],
+            );
+
+            let limiter = RateLimiter::new(10_000);
+            limiter.add_limit(limit);
+
+            let rate_limiter = KuadrantService::new(
+                Arc::new(Limiter::Blocking(limiter)),
+                RateLimitHeaders::DraftVersion03,
+                Arc::new(PrometheusMetrics::new_with_handle(
+                    false,
+                    TEST_PROMETHEUS_HANDLE.clone(),
+                )),
+            );
+
+            let req = RateLimitRequest {
+                domain: namespace.to_string(),
+                descriptors: vec![RateLimitDescriptor {
+                    entries: vec![
+                        Entry {
+                            key: "req.method".to_string(),
+                            value: "GET".to_string(),
+                        },
+                        Entry {
+                            key: "app.id".to_string(),
+                            value: "1".to_string(),
+                        },
+                    ],
+                    limit: None,
+                }],
+                hits_addend: 1,
+            };
+
+            let response = rate_limiter
+                .check_rate_limit(req.into_request())
+                .await
+                .unwrap()
+                .into_inner();
+
+            assert_eq!(response.overall_code, i32::from(Code::OverLimit));
+            assert_eq!(
+                response.response_headers_to_add,
+                vec![
+                    crate::envoy_rls::server::envoy::config::core::v3::HeaderValue {
+                        key: "X-RateLimit-Limit".to_string(),
+                        value: "0, 0;w=60".to_string(),
+                    },
+                    crate::envoy_rls::server::envoy::config::core::v3::HeaderValue {
+                        key: "X-RateLimit-Remaining".to_string(),
+                        value: "0".to_string(),
+                    },
+                ]
+            );
+        }
     }
 
     mod report {
@@ -688,6 +822,141 @@ mod tests {
 
             let response = rate_limiter.report(req).await.unwrap().into_inner();
             assert_eq!(response.overall_code, i32::from(Code::Unknown));
+        }
+
+        #[tokio::test]
+        async fn test_report_with_draftversion03_headers() {
+            let namespace = "test_namespace";
+            let limit = Limit::new(
+                namespace,
+                2,
+                60,
+                vec!["descriptors[0]['req.method'] == 'GET'"
+                    .try_into()
+                    .expect("failed parsing!")],
+                vec!["descriptors[0]['app.id']"
+                    .try_into()
+                    .expect("failed parsing!")],
+            );
+
+            let limiter = RateLimiter::new(10_000);
+            limiter.add_limit(limit);
+
+            let rate_limiter = KuadrantService::new(
+                Arc::new(Limiter::Blocking(limiter)),
+                RateLimitHeaders::DraftVersion03,
+                Arc::new(PrometheusMetrics::new_with_handle(
+                    false,
+                    TEST_PROMETHEUS_HANDLE.clone(),
+                )),
+            );
+
+            let req = RateLimitRequest {
+                domain: namespace.to_string(),
+                descriptors: vec![RateLimitDescriptor {
+                    entries: vec![
+                        Entry {
+                            key: "req.method".to_string(),
+                            value: "GET".to_string(),
+                        },
+                        Entry {
+                            key: "app.id".to_string(),
+                            value: "1".to_string(),
+                        },
+                    ],
+                    limit: None,
+                }],
+                hits_addend: 1,
+            };
+
+            let response = rate_limiter
+                .report(req.into_request())
+                .await
+                .unwrap()
+                .into_inner();
+
+            assert_eq!(response.overall_code, i32::from(Code::Ok));
+            assert_eq!(
+                response.response_headers_to_add,
+                vec![
+                    crate::envoy_rls::server::envoy::config::core::v3::HeaderValue {
+                        key: "X-RateLimit-Limit".to_string(),
+                        value: "2, 2;w=60".to_string(),
+                    },
+                    crate::envoy_rls::server::envoy::config::core::v3::HeaderValue {
+                        key: "X-RateLimit-Remaining".to_string(),
+                        value: "1".to_string(),
+                    },
+                ]
+            );
+        }
+
+        #[tokio::test]
+        async fn test_report_overlimit_with_draftversion03_headers() {
+            let namespace = "test_namespace";
+            let limit = Limit::new(
+                namespace,
+                1,
+                60,
+                vec!["descriptors[0]['req.method'] == 'GET'"
+                    .try_into()
+                    .expect("failed parsing!")],
+                vec!["descriptors[0]['app.id']"
+                    .try_into()
+                    .expect("failed parsing!")],
+            );
+
+            let limiter = RateLimiter::new(10_000);
+            limiter.add_limit(limit);
+
+            let rate_limiter = KuadrantService::new(
+                Arc::new(Limiter::Blocking(limiter)),
+                RateLimitHeaders::DraftVersion03,
+                Arc::new(PrometheusMetrics::new_with_handle(
+                    false,
+                    TEST_PROMETHEUS_HANDLE.clone(),
+                )),
+            );
+
+            let req = RateLimitRequest {
+                domain: namespace.to_string(),
+                descriptors: vec![RateLimitDescriptor {
+                    entries: vec![
+                        Entry {
+                            key: "req.method".to_string(),
+                            value: "GET".to_string(),
+                        },
+                        Entry {
+                            key: "app.id".to_string(),
+                            value: "1".to_string(),
+                        },
+                    ],
+                    limit: None,
+                }],
+                hits_addend: 5,
+            };
+
+            // Report always returns Ok even when going over the limit
+            let response = rate_limiter
+                .report(req.into_request())
+                .await
+                .unwrap()
+                .into_inner();
+
+            assert_eq!(response.overall_code, i32::from(Code::Ok));
+            assert_eq!(
+                response.response_headers_to_add,
+                vec![
+                    crate::envoy_rls::server::envoy::config::core::v3::HeaderValue {
+                        key: "X-RateLimit-Limit".to_string(),
+                        value: "1, 1;w=60".to_string(),
+                    },
+                    crate::envoy_rls::server::envoy::config::core::v3::HeaderValue {
+                        key: "X-RateLimit-Remaining".to_string(),
+                        value: "0".to_string(),
+                    },
+                ]
+            );
         }
     }
 }
