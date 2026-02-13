@@ -91,7 +91,7 @@ impl AsyncCounterStorage for AsyncRedisStorage {
                     .await?
             };
             
-            first_limited = is_limited(counters, delta, script_res);
+            first_limited = is_limited(counters, delta, script_res, update);
         } else {
             if check {
                 let counter_vals: Vec<Option<i64>> = {

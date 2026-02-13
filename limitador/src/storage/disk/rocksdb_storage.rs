@@ -68,18 +68,29 @@ impl CounterStorage for RocksDbStorage {
                 }
             };
 
+            let current_remaining = val;
+            let remaining = val + delta;
             if load_counters {
                 counter.set_expires_in(ttl);
-                counter.set_remaining(
-                    counter
-                        .max_value()
-                        .checked_sub(val + delta)
-                        .unwrap_or_default(),
-                );
+                if update {
+                    counter.set_remaining(
+                        counter
+                            .max_value()
+                            .checked_sub(remaining)
+                            .unwrap_or_default(),
+                    );
+                } else {
+                    counter.set_remaining(
+                        counter
+                            .max_value()
+                            .checked_sub(current_remaining)
+                            .unwrap_or_default(),
+                    )
+                }
             }
 
             if check {
-                if counter.max_value() < val + delta {
+                if counter.max_value() < remaining {
                     return Ok(Authorization::Limited(
                         counter.limit().name().map(|n| n.to_string()),
                     ));

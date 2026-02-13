@@ -75,7 +75,7 @@ impl CounterStorage for RedisStorage {
             let script_res: Vec<Option<i64>> = script_invocation.invoke(&mut *con)?;
 
             if check {
-                if let Some(res) = is_limited(counters, delta, script_res) {
+                if let Some(res) = is_limited(counters, delta, script_res, update) {
                     return Ok(res);
                 }
             }
