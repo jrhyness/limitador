@@ -88,9 +88,14 @@ impl CounterStorage for InMemoryStorage {
         let mut process_counter =
             |counter: &mut Counter, value: u64, delta: u64| -> () {
               
+                let current_remaining = counter.max_value().checked_sub(value);
                 let remaining = counter.max_value().checked_sub(value + delta);
                 if load_counters {   
-                    counter.set_remaining(remaining.unwrap_or_default());
+                    if update {
+                        counter.set_remaining(remaining.unwrap_or_default());
+                    } else {
+                        counter.set_remaining(current_remaining.unwrap_or_default());
+                    }
                 }
 
                 if first_limited.is_none() && remaining.is_none() {

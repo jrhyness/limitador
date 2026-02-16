@@ -48,17 +48,15 @@ impl RateLimitData {
     }
 }
 
-#[api_v2_errors(429, 500)]
+#[api_v2_errors(500)]
 #[derive(Debug)]
 enum ErrorResponse {
-    TooManyRequests,
     InternalServerError,
 }
 
 impl fmt::Display for ErrorResponse {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::TooManyRequests => write!(f, "Too many requests"),
             Self::InternalServerError => write!(f, "Internal server error"),
         }
     }
@@ -67,7 +65,6 @@ impl fmt::Display for ErrorResponse {
 impl ResponseError for ErrorResponse {
     fn status_code(&self) -> StatusCode {
         match self {
-            Self::TooManyRequests => StatusCode::TOO_MANY_REQUESTS,
             Self::InternalServerError => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -670,6 +667,229 @@ mod tests {
             .to_request();
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::TOO_MANY_REQUESTS);
+    }
+
+    #[actix_rt::test]
+    async fn test_check_with_response_headers() {
+        let namespace = "test_namespace";
+        let limiter = Limiter::new(Configuration::default()).await.unwrap();
+        let _limit = create_test_limit(&limiter, namespace, 2).await;
+
+        let rate_limiter: Arc<Limiter> = Arc::new(limiter);
+        let prometheus_metrics: Arc<PrometheusMetrics> = Arc::new(
+            PrometheusMetrics::new_with_handle(false, TEST_PROMETHEUS_HANDLE.clone()),
+        );
+        let data = web::Data::new(RateLimitData::new(
+            rate_limiter,
+            prometheus_metrics,
+            Default::default(),
+        ));
+        let app = test::init_service(
+            App::new()
+                .app_data(data.clone())
+                .route("/check", web::post().to(check)),
+        )
+        .await;
+
+        // Prepare values to check
+        let mut values = HashMap::new();
+        values.insert("req.method".into(), "GET".into());
+        values.insert("app.id".into(), "1".into());
+        let info = CheckAndReportInfo {
+            namespace: namespace.into(),
+            values,
+            delta: 1,
+            response_headers: Some("DraftVersion03".to_string()),
+        };
+
+        // First check should be OK with headers showing 2 remaining (check doesn't update counters)
+        let req = test::TestRequest::post()
+            .uri("/check")
+            .data(data.clone())
+            .set_json(&info)
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert!(resp.status().is_success());
+        assert_eq!(
+            resp.headers().get("X-RateLimit-Limit").unwrap(),
+            "2, 2;w=60"
+        );
+        assert_eq!(resp.headers().get("X-RateLimit-Remaining").unwrap(), "2");
+
+        // Second check should still be OK (check doesn't update counters)
+        let req = test::TestRequest::post()
+            .uri("/check")
+            .data(data.clone())
+            .set_json(&info)
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert!(resp.status().is_success());
+        assert_eq!(
+            resp.headers().get("X-RateLimit-Limit").unwrap(),
+            "2, 2;w=60"
+        );
+        assert_eq!(resp.headers().get("X-RateLimit-Remaining").unwrap(), "2");
+    }
+
+    #[actix_rt::test]
+    async fn test_report_with_response_headers() {
+        let namespace = "test_namespace";
+        let limiter = Limiter::new(Configuration::default()).await.unwrap();
+        let _limit = create_test_limit(&limiter, namespace, 2).await;
+
+        let rate_limiter: Arc<Limiter> = Arc::new(limiter);
+        let prometheus_metrics: Arc<PrometheusMetrics> = Arc::new(
+            PrometheusMetrics::new_with_handle(false, TEST_PROMETHEUS_HANDLE.clone()),
+        );
+        let data = web::Data::new(RateLimitData::new(
+            rate_limiter,
+            prometheus_metrics,
+            Default::default(),
+        ));
+        let app = test::init_service(
+            App::new()
+                .app_data(data.clone())
+                .route("/report", web::post().to(report)),
+        )
+        .await;
+
+        // Prepare values to check
+        let mut values = HashMap::new();
+        values.insert("req.method".into(), "GET".into());
+        values.insert("app.id".into(), "1".into());
+        let info = CheckAndReportInfo {
+            namespace: namespace.into(),
+            values,
+            delta: 1,
+            response_headers: Some("DraftVersion03".to_string()),
+        };
+
+        // First report should succeed with headers showing 1 remaining
+        let req = test::TestRequest::post()
+            .uri("/report")
+            .data(data.clone())
+            .set_json(&info)
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert!(resp.status().is_success());
+        assert_eq!(
+            resp.headers().get("X-RateLimit-Limit").unwrap(),
+            "2, 2;w=60"
+        );
+        assert_eq!(resp.headers().get("X-RateLimit-Remaining").unwrap(), "1");
+
+        // Second report should succeed with headers showing 0 remaining
+        let req = test::TestRequest::post()
+            .uri("/report")
+            .data(data.clone())
+            .set_json(&info)
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert!(resp.status().is_success());
+        assert_eq!(
+            resp.headers().get("X-RateLimit-Limit").unwrap(),
+            "2, 2;w=60"
+        );
+        assert_eq!(resp.headers().get("X-RateLimit-Remaining").unwrap(), "0");
+
+        // Third report should still succeed (report doesn't check limits) but show 0 remaining
+        let req = test::TestRequest::post()
+            .uri("/report")
+            .data(data.clone())
+            .set_json(&info)
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert!(resp.status().is_success());
+        assert_eq!(
+            resp.headers().get("X-RateLimit-Limit").unwrap(),
+            "2, 2;w=60"
+        );
+        assert_eq!(resp.headers().get("X-RateLimit-Remaining").unwrap(), "0");
+    }
+
+    #[actix_rt::test]
+    async fn test_check_and_report_with_response_headers() {
+        let namespace = "test_namespace";
+        let limiter = Limiter::new(Configuration::default()).await.unwrap();
+        let _limit = create_test_limit(&limiter, namespace, 2).await;
+
+        let rate_limiter: Arc<Limiter> = Arc::new(limiter);
+        let prometheus_metrics: Arc<PrometheusMetrics> = Arc::new(
+            PrometheusMetrics::new_with_handle(false, TEST_PROMETHEUS_HANDLE.clone()),
+        );
+        let data = web::Data::new(RateLimitData::new(
+            rate_limiter,
+            prometheus_metrics,
+            Default::default(),
+        ));
+        let app = test::init_service(
+            App::new()
+                .app_data(data.clone())
+                .route("/check", web::post().to(check))
+                .route("/report", web::post().to(report)),
+        )
+        .await;
+
+        // Prepare values
+        let mut values = HashMap::new();
+        values.insert("req.method".into(), "GET".into());
+        values.insert("app.id".into(), "1".into());
+        let info = CheckAndReportInfo {
+            namespace: namespace.into(),
+            values,
+            delta: 1,
+            response_headers: Some("DraftVersion03".to_string()),
+        };
+
+        // Check should show 2 remaining (no counter updates yet)
+        let req = test::TestRequest::post()
+            .uri("/check")
+            .data(data.clone())
+            .set_json(&info)
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert!(resp.status().is_success());
+        assert_eq!(resp.headers().get("X-RateLimit-Remaining").unwrap(), "2");
+
+        // Report once - counter becomes 1, headers show 1 remaining (2 - 1)
+        let req = test::TestRequest::post()
+            .uri("/report")
+            .data(data.clone())
+            .set_json(&info)
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert!(resp.status().is_success());
+        assert_eq!(resp.headers().get("X-RateLimit-Remaining").unwrap(), "1");
+
+        // Check should show 1 remaining (current counter is 1, so 2-1=1 remaining)
+        let req = test::TestRequest::post()
+            .uri("/check")
+            .data(data.clone())
+            .set_json(&info)
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert!(resp.status().is_success());
+        assert_eq!(resp.headers().get("X-RateLimit-Remaining").unwrap(), "1");
+
+        // Report again - counter becomes 2, headers show 0 remaining (2 - 2)
+        let req = test::TestRequest::post()
+            .uri("/report")
+            .data(data.clone())
+            .set_json(&info)
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert!(resp.status().is_success());
+        assert_eq!(resp.headers().get("X-RateLimit-Remaining").unwrap(), "0");
+
+        // Check should now fail with 429 (counter at 2, delta 1 would exceed limit of 2)
+        let req = test::TestRequest::post()
+            .uri("/check")
+            .data(data.clone())
+            .set_json(&info)
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(resp.headers().get("X-RateLimit-Remaining").unwrap(), "0");
     }
 
     async fn create_test_limit(limiter: &Limiter, namespace: &str, max: u64) -> LimitadorLimit {
