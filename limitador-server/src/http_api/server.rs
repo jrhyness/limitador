@@ -129,30 +129,52 @@ async fn get_counters(
 async fn check(
     state: web::Data<RateLimitData>,
     request: web::Json<CheckAndReportInfo>,
-) -> Result<web::Json<()>, ErrorResponse> {
+) -> HttpResponse {
     let CheckAndReportInfo {
         namespace,
         values,
         delta,
-        response_headers: _,
+        response_headers,
     } = request.into_inner();
     let namespace = namespace.into();
     let mut ctx = Context::default();
     ctx.list_binding("descriptors".to_string(), vec![values]);
     let is_rate_limited_result = match state.get_ref().limiter() {
-        Limiter::Blocking(limiter) => limiter.is_rate_limited(&namespace, &ctx, delta, false),
-        Limiter::Async(limiter) => limiter.is_rate_limited(&namespace, &ctx, delta, false).await,
+        Limiter::Blocking(limiter) => limiter.is_rate_limited(&namespace, &ctx, delta, response_headers.is_some()),
+        Limiter::Async(limiter) => limiter.is_rate_limited(&namespace, &ctx, delta, response_headers.is_some()).await,
     };
 
     match is_rate_limited_result {
-        Ok(rate_limited) => {
+        Ok(mut rate_limited) => {
             if rate_limited.limited {
-                Err(ErrorResponse::TooManyRequests)
+                match response_headers {
+                    None => HttpResponse::TooManyRequests().json(()),
+                    Some(response_headers) => {
+                        let mut resp = HttpResponse::TooManyRequests();
+                        add_response_header(
+                            &mut resp,
+                            response_headers.as_str(),
+                            &mut rate_limited,
+                        );
+                        resp.json(())
+                    }
+                }
             } else {
-                Ok(Json(()))
+                match response_headers {
+                    None => HttpResponse::Ok().json(()),
+                    Some(response_headers) => {
+                        let mut resp = HttpResponse::Ok();
+                        add_response_header(
+                            &mut resp,
+                            response_headers.as_str(),
+                            &mut rate_limited,
+                        );
+                        resp.json(())
+                    }
+                }
             }
         }
-        Err(_) => Err(ErrorResponse::InternalServerError),
+        Err(_) => HttpResponse::InternalServerError().json(()),
     }
 }
 
@@ -161,24 +183,48 @@ async fn check(
 async fn report(
     data: web::Data<RateLimitData>,
     request: web::Json<CheckAndReportInfo>,
-) -> Result<web::Json<()>, ErrorResponse> {
+) -> HttpResponse {
     let CheckAndReportInfo {
         namespace,
         values,
         delta,
-        response_headers: _,
+        response_headers,
     } = request.into_inner();
     let namespace = namespace.into();
     let mut ctx = Context::default();
-    ctx.list_binding("descriptors".to_string(), vec![values]);
+    ctx.list_binding("descriptors".to_string(), vec![values.clone()]);
     let update_counters_result = match data.get_ref().limiter() {
-        Limiter::Blocking(limiter) => limiter.update_counters(&namespace, &ctx, delta, false),
-        Limiter::Async(limiter) => limiter.update_counters(&namespace, &ctx, delta, false).await,
+        Limiter::Blocking(limiter) => limiter.update_counters(&namespace, &ctx, delta, response_headers.is_some()),
+        Limiter::Async(limiter) => limiter.update_counters(&namespace, &ctx, delta, response_headers.is_some()).await,
     };
 
     match update_counters_result {
-        Ok(_) => Ok(Json(())),
-        Err(_) => Err(ErrorResponse::InternalServerError),
+        Ok(_) => {
+            match response_headers {
+                None => HttpResponse::Ok().json(()),
+                Some(response_headers) => {
+                    // Get current limit state for headers by checking with delta=0
+                    let check_result = match data.get_ref().limiter() {
+                        Limiter::Blocking(limiter) => limiter.is_rate_limited(&namespace, &ctx, 0, true),
+                        Limiter::Async(limiter) => limiter.is_rate_limited(&namespace, &ctx, 0, true).await,
+                    };
+
+                    match check_result {
+                        Ok(mut rate_limited) => {
+                            let mut resp = HttpResponse::Ok();
+                            add_response_header(
+                                &mut resp,
+                                response_headers.as_str(),
+                                &mut rate_limited,
+                            );
+                            resp.json(())
+                        }
+                        Err(_) => HttpResponse::Ok().json(()),
+                    }
+                }
+            }
+        }
+        Err(_) => HttpResponse::InternalServerError().json(()),
     }
 }
 
