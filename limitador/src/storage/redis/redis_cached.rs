@@ -156,7 +156,7 @@ impl AsyncCounterStorage for CachedRedisStorage {
             conn,
             self.cached_counters.clone(),
             partitioned,
-            DEFAULT_BATCH_SIZE, // JR: FIXME - do we have a this batch size?                                                                                                                                        
+            DEFAULT_BATCH_SIZE,                                                                                                                                    
         )
       .await;                                          
         self.async_redis_storage.get_counters(limits).await
