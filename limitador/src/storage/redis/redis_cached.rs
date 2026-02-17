@@ -85,11 +85,17 @@ impl AsyncCounterStorage for CachedRedisStorage {
                         first_limited = Some(Authorization::Limited(counter.limit().name().map(|n| n.to_owned())));
                     }
                     if load_counters {
-                        counter.set_remaining(
-                            val.remaining(counter)
-                                .checked_sub(delta)
-                                .unwrap_or_default(),
-                        );
+                        if update {
+                            counter.set_remaining(
+                                val.remaining(counter)
+                                    .checked_sub(delta)
+                                    .unwrap_or_default(),
+                            );
+                        } else {
+                            counter.set_remaining(
+                                val.remaining(counter)
+                            );
+                        }
                         counter.set_expires_in(val.ttl());
                     }
                 }
@@ -110,7 +116,11 @@ impl AsyncCounterStorage for CachedRedisStorage {
                     ));
                 }
                 if load_counters {
-                    counter.set_remaining(remaining - delta);
+                    if update {
+                        counter.set_remaining(remaining - delta);
+                    } else {
+                        counter.set_remaining(remaining);
+                    }
                     counter.set_expires_in(fake.ttl()); // todo: this is a plain lie!
                 }
             }
