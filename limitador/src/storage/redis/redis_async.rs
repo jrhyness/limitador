@@ -294,8 +294,8 @@ mod tests {
         assert_eq!(result.err().unwrap().kind(), ErrorKind::InvalidClientConfig);
     }
 
-    /* 
     #[tokio::test]
+    #[ignore]  // Hangs
     async fn errs_on_connection_issue() {
         let result = AsyncRedisStorage::new("redis://127.0.0.1:21").await;
         assert!(result.is_err());
@@ -303,5 +303,4 @@ mod tests {
         assert_eq!(error.kind(), ErrorKind::IoError);
         assert!(error.is_connection_refusal())
     }
-    */
 }

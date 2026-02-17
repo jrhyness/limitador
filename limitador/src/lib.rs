@@ -114,7 +114,6 @@
 //! values_to_report.insert("req_method".to_string(), "GET".to_string());
 //! values_to_report.insert("user_id".to_string(), "1".to_string());
 //! 
-//! // JR: TODO: describe the falses
 //!
 //! // Check if we can report
 //! let namespace = "my_namespace".into();

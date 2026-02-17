@@ -262,7 +262,7 @@ mod tests {
 
             let rate_limiter = KuadrantService::new(
                 Arc::new(Limiter::Blocking(limiter)),
-                RateLimitHeaders::None, // TODO: test with headers
+                RateLimitHeaders::None,
                 Arc::new(PrometheusMetrics::new_with_handle(
                     false,
                     TEST_PROMETHEUS_HANDLE.clone(),
@@ -324,7 +324,7 @@ mod tests {
 
             let rate_limiter = KuadrantService::new(
                 Arc::new(Limiter::Blocking(limiter)),
-                RateLimitHeaders::None, // TODO: test with headers
+                RateLimitHeaders::None,
                 Arc::new(PrometheusMetrics::new_with_handle(
                     false,
                     TEST_PROMETHEUS_HANDLE.clone(),
@@ -365,7 +365,7 @@ mod tests {
             let limiter = RateLimiter::new(10_000);
             let rate_limiter = KuadrantService::new(
                 Arc::new(Limiter::Blocking(limiter)),
-                RateLimitHeaders::None, // TODO: test with headers
+                RateLimitHeaders::None,
                 Arc::new(PrometheusMetrics::new_with_handle(
                     false,
                     TEST_PROMETHEUS_HANDLE.clone(),
@@ -399,7 +399,7 @@ mod tests {
             let limiter = RateLimiter::new(10_000);
             let rate_limiter = KuadrantService::new(
                 Arc::new(Limiter::Blocking(limiter)),
-                RateLimitHeaders::None, // TODO: test with headers
+                RateLimitHeaders::None,
                 Arc::new(PrometheusMetrics::new_with_handle(
                     false,
                     TEST_PROMETHEUS_HANDLE.clone(),
@@ -465,7 +465,7 @@ mod tests {
 
             let rate_limiter = KuadrantService::new(
                 Arc::new(Limiter::Blocking(limiter)),
-                RateLimitHeaders::None, // TODO: test with headers
+                RateLimitHeaders::None,
                 Arc::new(PrometheusMetrics::new_with_handle(
                     false,
                     TEST_PROMETHEUS_HANDLE.clone(),
@@ -678,7 +678,7 @@ mod tests {
 
             let rate_limiter = KuadrantService::new(
                 Arc::new(Limiter::Blocking(limiter)),
-                RateLimitHeaders::None, // TODO: test with headers
+                RateLimitHeaders::None,
                 Arc::new(PrometheusMetrics::new_with_handle(
                     false,
                     TEST_PROMETHEUS_HANDLE.clone(),
@@ -731,7 +731,7 @@ mod tests {
 
             let rate_limiter = KuadrantService::new(
                 Arc::new(Limiter::Blocking(limiter)),
-                RateLimitHeaders::None, // TODO: test with headers
+                RateLimitHeaders::None,
                 Arc::new(PrometheusMetrics::new_with_handle(
                     false,
                     TEST_PROMETHEUS_HANDLE.clone(),
@@ -770,7 +770,7 @@ mod tests {
             let limiter = RateLimiter::new(10_000);
             let rate_limiter = KuadrantService::new(
                 Arc::new(Limiter::Blocking(limiter)),
-                RateLimitHeaders::None, // TODO: test with headers
+                RateLimitHeaders::None,
                 Arc::new(PrometheusMetrics::new_with_handle(
                     false,
                     TEST_PROMETHEUS_HANDLE.clone(),
@@ -800,7 +800,7 @@ mod tests {
             let limiter = RateLimiter::new(10_000);
             let rate_limiter = KuadrantService::new(
                 Arc::new(Limiter::Blocking(limiter)),
-                RateLimitHeaders::None, // TODO: test with headers
+                RateLimitHeaders::None,
                 Arc::new(PrometheusMetrics::new_with_handle(
                     false,
                     TEST_PROMETHEUS_HANDLE.clone(),
