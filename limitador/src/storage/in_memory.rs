@@ -90,11 +90,11 @@ impl CounterStorage for InMemoryStorage {
               
                 let current_remaining = counter.max_value().checked_sub(value);
                 let remaining = counter.max_value().checked_sub(value + delta);
-                if load_counters {
+                if load_counters {   
                     if update {
-                    counter.set_remaining(remaining.unwrap_or_default());
+                        counter.set_remaining(remaining.unwrap_or_default());
                     } else {
-                        counter.set_remaining(current_remaining.unwrap_or_default())
+                        counter.set_remaining(current_remaining.unwrap_or_default());
                     }
                 }
 
